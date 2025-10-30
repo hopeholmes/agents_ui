@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: odoo_db
+    restart: always
+    env_file: .env
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    networks:
+      - americana_net
+
+  odoo:
+    image: odoo:17.0
+    container_name: odoo
+    restart: always
+    depends_on:
+      - db
+    env_file: .env
+    volumes:
+      - ./data/odoo:/var/lib/odoo
+      - ./extra-addons:/mnt/extra-addons
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.odoo.rule=Host(`odoocrm.americanaamplified.com`)"
+      - "traefik.http.routers.odoo.entrypoints=websecure"
+      - "traefik.http.routers.odoo.tls.certresolver=le"
+      - "traefik.http.services.odoo.loadbalancer.server.port=8069"
+    networks:
+      - americana_net
+
+networks:
+  americana_net:
+    external: true
+

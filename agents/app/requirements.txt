@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+psycopg2-binary
+redis
+chromadb
+sqlalchemy
+python-dotenv
+sse-starlette

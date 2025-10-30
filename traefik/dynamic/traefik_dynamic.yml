@@ -1,0 +1,12 @@
+# Optional features like middlewares or security headers go here
+# For now, it just exists as a placeholder
+http:
+  middlewares:
+http:
+  middlewares:
+    redirect-to-root:
+      redirectRegex:
+        regex: "^https?://(?:www\\.)?americanaamplified\\.com/.*"
+        replacement: "https://americanaamplified.com/"
+        permanent: true
+

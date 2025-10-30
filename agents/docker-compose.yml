@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  agents:
+    build: ./app
+    image: americana-agents:latest
+    container_name: api
+    restart: unless-stopped
+    depends_on:
+      - chroma
+      - redis
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+#    ports:
+ #     - "8080:8080"  # <— this publishes FastAPI to host and Traefik
+    networks:
+      - americana_net
+      - agents_internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.agents.rule=Host(`api.americanaamplified.com`)"
+      - "traefik.http.routers.agents.entrypoints=websecure"
+      - "traefik.http.routers.agents.tls.certresolver=le"
+      - "traefik.http.services.agents.loadbalancer.server.port=8080"
+      - "traefik.docker.network=americana_net"
+
+  chroma:
+    image: ghcr.io/chroma-core/chroma:${CHROMA_TAG}
+    container_name: chroma
+    restart: always
+    volumes:
+      - ./chroma_data:/chroma/chroma
+    networks:
+      - agents_internal
+    # ports:
+    #   - "${CHROMA_PORT}:8000"  # optional, for testing
+
+  redis:
+    image: redis:${REDIS_TAG}
+    container_name: redis
+    restart: always
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - agents_internal
+    # ports:
+    #   - "${REDIS_PORT}:6379"   # optional, for debug
+
+networks:
+  americana_net:
+    external: true
+  agents_internal:
+    driver: bridge
+

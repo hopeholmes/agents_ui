@@ -16,7 +16,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.agents_ui.rule=Host(`agents.americanaamplified.com`)"
       - "traefik.http.routers.agents_ui.entrypoints=websecure"
-      - "traefik.http.routers.agents_ui.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.agents_ui.tls.certresolver=le"
       - "traefik.docker.network=americana_net"
 
 networks:
