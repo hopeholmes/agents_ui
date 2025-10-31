@@ -1,31 +1,30 @@
+import { useState, useMemo } from "react";
 import { useApprovals } from "@/hooks/useApprovals";
 import { ApprovalCard } from "@/components/ApprovalCard";
 import ApprovalsEmpty from "@/components/ApprovalsEmpty";
 import ReviewModal from "@/components/ReviewModal";
 import { useToast } from "@/components/ToastProvider";
-import { useState } from "react";
 
 export default function ApprovalsPage() {
-  const { items, loading, error, approve, reject, load } = useApprovals();
+  const { items, loading, error, refresh, approve, reject } = useApprovals();
   const [selected, setSelected] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const { push } = useToast();
 
-  const activeItem = items.find((x) => x.id === selected) || null;
+  const pendingItems = useMemo(
+    () => items.filter((item) => item.status === "pending"),
+    [items]
+  );
+  const activeItem = items.find((item) => item.id === selected) ?? null;
 
-  async function approveDirect(id: string) {
-    await approve(id);
+  async function approveDirect(id: string, options?: { note?: string }) {
+    await approve(id, options);
     push({ title: "Approved", message: "Item approved successfully" });
   }
 
-  async function rejectDirect(id: string, reason?: string) {
-    await reject(id, reason);
+  async function rejectDirect(id: string, options?: { reason?: string }) {
+    await reject(id, options);
     push({ title: "Rejected", message: "Item rejected" });
-  }
-
-  async function approveWithEdits(id: string, edits?: any) {
-    await approve(id, edits);
-    push({ title: "Approved", message: "Item approved with edits" });
   }
 
   return (
@@ -33,7 +32,7 @@ export default function ApprovalsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Approvals</h1>
         <div className="flex items-center gap-3">
-          <button onClick={() => load()} className="text-sm underline">
+          <button onClick={() => refresh()} className="text-sm underline">
             Refresh
           </button>
         </div>
@@ -41,15 +40,13 @@ export default function ApprovalsPage() {
 
       {loading && <div className="text-sm text-muted-foreground">Loading…</div>}
       {error && (
-        <div className="text-sm text-red-600">
-          Failed to load approvals: {error}
-        </div>
+        <div className="text-sm text-red-500">Failed to load approvals: {error}</div>
       )}
 
-      {!loading && !error && items.length === 0 && <ApprovalsEmpty />}
+      {!loading && !error && pendingItems.length === 0 && <ApprovalsEmpty />}
 
       <div className="grid gap-4">
-        {items.map((item) => (
+        {pendingItems.map((item) => (
           <div
             key={item.id}
             onDoubleClick={() => {
@@ -57,11 +54,7 @@ export default function ApprovalsPage() {
               setModalOpen(true);
             }}
           >
-            <ApprovalCard
-              item={item}
-              onApprove={approveDirect}
-              onReject={rejectDirect}
-            />
+            <ApprovalCard item={item} onApprove={approveDirect} onReject={rejectDirect} />
           </div>
         ))}
       </div>
@@ -70,7 +63,7 @@ export default function ApprovalsPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         item={activeItem}
-        onApprove={approveWithEdits}
+        onApprove={approveDirect}
         onReject={rejectDirect}
       />
     </div>

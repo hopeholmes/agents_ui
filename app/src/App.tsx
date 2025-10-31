@@ -12,7 +12,7 @@ export default function App() {
         <main className="flex-1 relative p-6 overflow-auto">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            {/* Future routes */}
+            <Route path="/approvals" element={<ApprovalsPage />} />
           </Routes>
           <StatusIndicator />
         </main>
