@@ -1,76 +1,118 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { get, post } from "@/lib/api";
-import { openEventStream } from "@/lib/events";
-import type { ApprovalItem, ApprovalsResponse } from "@/types/approval";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { get, patch } from "@/lib/api";
+import type { ApprovalActionPayload, ApprovalItem } from "@/types/approval";
+
+const POLL_INTERVAL_MS = 10_000;
+
+type LoadOptions = {
+  silent?: boolean;
+};
+
+type ApprovalsResponse = {
+  approvals: ApprovalItem[];
+};
+
+function sortApprovals(items: ApprovalItem[]) {
+  return items
+    .slice()
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+}
 
 export function useApprovals() {
   const [items, setItems] = useState<ApprovalItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
 
-  // Load pending approvals
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await get<ApprovalsResponse>("/approvals/pending");
-      setItems(res?.items || []);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (options?: LoadOptions) => {
+      if (!options?.silent) {
+        setLoading(true);
+      }
+      setError(null);
 
-  // Initial fetch
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // Live updates via SSE
-  useEffect(() => {
-    if (esRef.current) return; // prevent duplicates
-    try {
-      esRef.current = openEventStream(
-        `${import.meta.env.VITE_API_BASE_URL}/events/approvals`,
-        (data: any) => {
-          if (data?.type === "pending" && data.item) {
-            setItems((prev) => {
-              const exists = prev.some((x) => x.id === data.item.id);
-              return exists ? prev : [data.item as ApprovalItem, ...prev];
-            });
-          }
+      try {
+        const response = await get<ApprovalsResponse>("/api/approvals");
+        const approvals = response?.approvals ?? [];
+        setItems(sortApprovals(approvals));
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        if (!options?.silent) {
+          setLoading(false);
         }
-      );
-    } catch {
-      /* ignore connection errors */
-    }
-    return () => {
-      esRef.current?.close?.();
-      esRef.current = null;
-    };
-  }, []);
-
-  // Approve / reject actions
-  const approve = useCallback(
-    async (id: string, edits?: any) => {
-      await post(`/approvals/${id}/approve`, edits && Object.keys(edits).length ? edits : undefined);
-      setItems((prev) => prev.filter((x) => x.id !== id));
+      }
     },
     []
+  );
+
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => {
+      void load({ silent: true });
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  const mutate = useCallback(
+    async (id: string, payload: ApprovalActionPayload) => {
+      const response = await patch<{ approval: ApprovalItem }>(
+        `/api/approvals/${id}`,
+        payload
+      );
+      const updated = response?.approval;
+      if (updated) {
+        setItems((prev) => {
+          const next = prev.filter((item) => item.id !== id);
+          if (updated.status === "pending") {
+            next.push(updated);
+          }
+          return sortApprovals(next);
+        });
+      } else {
+        void load({ silent: true });
+      }
+      return updated;
+    },
+    [load]
+  );
+
+  const approve = useCallback(
+    async (
+      id: string,
+      options?: { note?: string; operator?: string }
+    ): Promise<ApprovalItem | undefined> => {
+      return mutate(id, {
+        status: "approved",
+        resolution_note: options?.note,
+        operator: options?.operator,
+      });
+    },
+    [mutate]
   );
 
   const reject = useCallback(
-    async (id: string, reason?: string) => {
-      await post(`/approvals/${id}/reject`, { reason });
-      setItems((prev) => prev.filter((x) => x.id !== id));
+    async (
+      id: string,
+      options?: { reason?: string; operator?: string }
+    ): Promise<ApprovalItem | undefined> => {
+      return mutate(id, {
+        status: "rejected",
+        resolution_note: options?.reason,
+        operator: options?.operator,
+      });
     },
-    []
+    [mutate]
   );
 
   return useMemo(
-    () => ({ items, loading, error, load, approve, reject }),
+    () => ({
+      items,
+      loading,
+      error,
+      refresh: () => load(),
+      approve,
+      reject,
+    }),
     [items, loading, error, load, approve, reject]
   );
 }
